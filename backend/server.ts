@@ -142,12 +142,16 @@ app.post('/webhook/hsp', (req, res) => {
         }
     }
 
-    // Safely extract the ID
-    const intentId = req.body.payment_request_id || req.body.cart_mandate_id || req.body.intentId || req.body.data?.payment_request_id;
+    // Extract IDs from webhook payload per HashKey docs:
+    // cart_mandate_id (ID1) = our intentId  ← what the frontend polls with
+    // payment_request_id (ID2) = "PAY-{intentId}" ← different, must NOT use for lookup
+    const intentId = req.body.cart_mandate_id || req.body.intentId || req.body.data?.cart_mandate_id;
     const status = req.body.status || req.body.data?.status;
 
-    // Fast-path confirm
-    if ((status === 'payment-successful' || status === 'SUCCESS' || status === 'PAID') && intentId) {
+    console.log(`[HSP MIDDLEWARE] 📦 cart_mandate_id=${intentId}, status=${status}`);
+
+    // Fast-path confirm — also accept payment-included for instant fulfillment
+    if ((status === 'payment-successful' || status === 'payment-included' || status === 'SUCCESS' || status === 'PAID') && intentId) {
         console.log(`[HSP MIDDLEWARE] ✅ Payment for intent ${intentId} confirmed through CaaS!`);
 
         if (paymentStatuses.get(intentId) !== 'LOCKED_AND_VERIFIED') {
@@ -155,6 +159,7 @@ app.post('/webhook/hsp', (req, res) => {
             const voucherId = `hsp-voucher-${crypto.randomBytes(4).toString('hex')}`;
             validVouchers.set(voucherId, true);
             intentToVoucher.set(intentId, voucherId);
+            console.log(`[HSP MIDDLEWARE] 🎫 Voucher ${voucherId} issued for intent ${intentId}`);
         }
         return res.status(200).json({ code: 0, msg: "success" });
     }
@@ -227,9 +232,10 @@ app.post('/api/agent-checkout', async (req, res) => {
             .setJti(`JWT-${Date.now()}`)
             .sign(privateKey);
 
+        const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
         const payload = {
             cart_mandate: { contents, merchant_authorization: jwt },
-            redirect_url: "http://localhost:3000?success=true"
+            redirect_url: `${frontendUrl}?success=true&intentId=${intentId}`
         };
 
         // Serialize to canonical JSON ONCE — use same string for hash AND HTTP body

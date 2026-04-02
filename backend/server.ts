@@ -230,14 +230,17 @@ app.post('/api/agent-checkout', async (req, res) => {
             redirect_url: "http://localhost:3000?success=true"
         };
 
+        // Serialize to canonical JSON ONCE — use same string for hash AND HTTP body
+        // This ensures HashKey's server-side HMAC check matches ours exactly
+        const bodyStr = canonicalStringify(payload);
         const nonce = crypto.randomUUID().replace(/-/g, '');
         const timestamp = Math.floor(Date.now() / 1000).toString();
-        const bodyHash = crypto.createHash('sha256').update(canonicalStringify(payload)).digest('hex');
+        const bodyHash = crypto.createHash('sha256').update(bodyStr).digest('hex');
         const message = `POST\n/api/v1/merchant/orders\n\n${bodyHash}\n${timestamp}\n${nonce}`;
         const signature = crypto.createHmac('sha256', HSP_API_SECRET).update(message).digest('hex');
 
         // Live request execution using QA/Integration server per docs
-        const response = await axios.post(`https://merchant-qa.hashkeymerchant.com/api/v1/merchant/orders`, payload, {
+        const response = await axios.post(`https://merchant-qa.hashkeymerchant.com/api/v1/merchant/orders`, bodyStr, {
             headers: {
                 'X-App-Key': HSP_APP_KEY,
                 'X-Signature': signature,

@@ -204,7 +204,13 @@ app.post('/api/agent-checkout', async (req, res) => {
         };
         const cartHash = crypto.createHash('sha256').update(canonicalStringify(contents)).digest('hex');
 
-        const privateKeyStr = fs.readFileSync("../merchant_private_key.pem", "utf8");
+        let privateKeyStr = process.env.MERCHANT_PRIVATE_KEY;
+        if (privateKeyStr) {
+            privateKeyStr = privateKeyStr.replace(/\\n/g, '\n');
+        } else {
+            privateKeyStr = fs.readFileSync("../merchant_private_key.pem", "utf8");
+        }
+        
         // Convert SEC1 to PKCS8 dynamically for jose
         const keyObj = crypto.createPrivateKey(privateKeyStr);
         const pkcs8Str = keyObj.export({ type: 'pkcs8', format: 'pem' }) as string;

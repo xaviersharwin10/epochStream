@@ -19,7 +19,7 @@ app.use(express.json({
 }));
 
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
 
 const HASHKEY_TESTNET_RPC = process.env.HASHKEY_TESTNET_RPC as string;
 const CONTRACT_ADDRESS = process.env.CONTRACT_ADDRESS as string;

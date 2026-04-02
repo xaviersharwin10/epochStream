@@ -170,8 +170,10 @@ app.post('/api/agent-checkout', async (req, res) => {
     console.log(`\n[BUYER AGENT] ⚙️ Generating ES256K JWT and building live HashKey checkout URL...`);
 
     try {
+        const paymentRequestId = `PAY-${intentId}`; // ID2 must be different from cart_mandate_id (ID1)
+
         const contents = {
-            id: intentId,
+            id: intentId,                    // cart_mandate_id (ID1)
             user_cart_confirmation_required: true,
             payment_request: {
                 method_data: [{
@@ -186,9 +188,9 @@ app.post('/api/agent-checkout', async (req, res) => {
                     }
                 }],
                 details: {
-                    id: intentId,
-                    display_items: [{ label: "Premium AI Data", amount: { currency: "USDT", value: Number(amount).toFixed(2) } }],
-                    total: { label: "Total", amount: { currency: "USDT", value: Number(amount).toFixed(2) } }
+                    id: paymentRequestId,    // payment_request_id (ID2) — must differ from ID1
+                    display_items: [{ label: "Premium AI Data", amount: { currency: "USD", value: Number(amount).toFixed(2) } }],
+                    total: { label: "Total", amount: { currency: "USD", value: Number(amount).toFixed(2) } }
                 }
             },
             cart_expiry: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString().split('.')[0] + 'Z',

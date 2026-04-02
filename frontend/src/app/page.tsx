@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Bot, Server, Network, ShieldAlert,
   CheckCircle2, Loader2, Key, Zap
 } from 'lucide-react';
 
-const API_BASE = "http://localhost:3001";
+const API_BASE = "https://epochstream-production.up.railway.app";
 
 export default function EpochstreamDashboard() {
   const [step, setStep] = useState<number>(0);
@@ -14,6 +14,54 @@ export default function EpochstreamDashboard() {
   const [voucherId, setVoucherId] = useState<string>("");
   const [txHash, setTxHash] = useState<string>("");
   const [finalData, setFinalData] = useState<any>(null);
+
+  // On mount: if HashKey redirected back with ?success=true&intentId=xxx,
+  // auto-recover the completed payment state so the redirected tab shows results too
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const returnedIntentId = params.get('intentId');
+    const isSuccess = params.get('success') === 'true';
+
+    if (isSuccess && returnedIntentId) {
+      setIntentId(returnedIntentId);
+      setStep(2); // show "awaiting" briefly while we recover
+
+      // Poll once with a small delay to let the webhook settle
+      const recover = async () => {
+        for (let i = 0; i < 10; i++) {
+          await new Promise(r => setTimeout(r, 2000));
+          try {
+            const statusRes = await fetch(`${API_BASE}/api/status?intentId=${returnedIntentId}`);
+            if (statusRes.ok) {
+              const json = await statusRes.json();
+              if (json.status === 'LOCKED_AND_VERIFIED' && json.voucherId) {
+                setVoucherId(json.voucherId);
+                setStep(3);
+                await new Promise(r => setTimeout(r, 1500));
+
+                // Fetch the premium data with the recovered voucher
+                const dataRes = await fetch(`${API_BASE}/api/premium-data`, {
+                  headers: { 'X-HSP-Voucher-ID': json.voucherId }
+                });
+                if (dataRes.ok) {
+                  const data = await dataRes.json();
+                  setFinalData(data);
+                  setStep(4);
+                }
+                // Clear the URL params to avoid re-triggering on refresh
+                window.history.replaceState({}, '', '/');
+                return;
+              }
+            }
+          } catch (e) { }
+        }
+        // If we couldn't recover after retries, just go back to start
+        setStep(0);
+      };
+
+      recover();
+    }
+  }, []);
 
   const startFlow = async () => {
     setStep(1);

@@ -29,11 +29,11 @@ const WELCOME: Message = {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function EpochstreamDashboard() {
-  const [messages,       setMessages]       = useState<Message[]>([WELCOME]);
+  const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [settlementLogs, setSettlementLogs] = useState<LogEntry[]>([]);
-  const [sellerLogs,     setSellerLogs]     = useState<LogEntry[]>([]);
-  const [flowState,      setFlowState]      = useState<FlowState>('idle');
-  const [input,          setInput]          = useState('');
+  const [sellerLogs, setSellerLogs] = useState<LogEntry[]>([]);
+  const [flowState, setFlowState] = useState<FlowState>('idle');
+  const [input, setInput] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll chat
@@ -112,7 +112,7 @@ export default function EpochstreamDashboard() {
     addSlog('Signing with ES256K (secp256k1)...', 'text-cyan-400', '🔑');
 
     try {
-      const res  = await fetch(`${API_BASE}/api/checkout-url`, {
+      const res = await fetch(`${API_BASE}/api/checkout-url`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ intentId, amount: price })
       });
@@ -147,7 +147,7 @@ export default function EpochstreamDashboard() {
     addSlog('Checking USDT + HSK balances...', 'text-purple-400', '💰');
 
     try {
-      const res  = await fetch(`${API_BASE}/api/autonomous-pay`, {
+      const res = await fetch(`${API_BASE}/api/autonomous-pay`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ intentId })
       });
@@ -188,7 +188,7 @@ export default function EpochstreamDashboard() {
     for (let i = 0; i < 60; i++) {
       await new Promise(r => setTimeout(r, 3000));
       try {
-        const res  = await fetch(`${API_BASE}/api/status?intentId=${intentId}`);
+        const res = await fetch(`${API_BASE}/api/status?intentId=${intentId}`);
         const json = await res.json();
         if (json.status === 'LOCKED_AND_VERIFIED' && json.voucherId) {
           addSlog('Webhook received!', 'text-emerald-400', '✅');
@@ -201,7 +201,7 @@ export default function EpochstreamDashboard() {
           await fulfillData(json.voucherId);
           return;
         }
-      } catch (_) {}
+      } catch (_) { }
     }
     addMsg({ role: 'agent', type: 'error', content: 'Payment verification timed out.' });
     setFlowState('idle');
@@ -212,7 +212,7 @@ export default function EpochstreamDashboard() {
     addElog(`→ GET /api/premium-data`, 'text-slate-400');
     addElog(`  X-HSP-Voucher-ID: ${voucherId.slice(0, 20)}...`, 'text-slate-500');
     try {
-      const res  = await fetch(`${API_BASE}/api/premium-data`, {
+      const res = await fetch(`${API_BASE}/api/premium-data`, {
         headers: { 'X-HSP-Voucher-ID': voucherId }
       });
       if (res.ok) {
@@ -288,7 +288,7 @@ export default function EpochstreamDashboard() {
                 </a>
               )}
               {m.data?.txHash && (
-                <a href={`https://explorer-test.hashkey.cloud/tx/${m.data.txHash}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300">
+                <a href={`https://testnet-explorer.hsk.xyz/tx/${m.data.txHash}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300">
                   <ExternalLink className="w-3 h-3" /> View on HashKey Explorer
                 </a>
               )}
@@ -305,13 +305,13 @@ export default function EpochstreamDashboard() {
               </div>
               <div className="p-3 space-y-2">
                 {[
-                  ['Asset',              m.data.asset,            'text-white'],
-                  ['Signal',             m.data.signal,           m.data.signal.startsWith('LONG') ? 'text-emerald-400 font-black text-sm' : 'text-red-400 font-black text-sm'],
-                  ['Confidence',         `${m.data.confidence}%`, 'text-cyan-400'],
-                  ['Whale Accumulation', m.data.whaleAccumulation,'text-amber-400'],
-                  ['Price Target',       m.data.priceTarget,      'text-emerald-400'],
-                  ['Stop Loss',          m.data.stopLoss,         'text-red-400'],
-                  ['Risk Level',         m.data.riskLevel,        'text-slate-300'],
+                  ['Asset', m.data.asset, 'text-white'],
+                  ['Signal', m.data.signal, m.data.signal.startsWith('LONG') ? 'text-emerald-400 font-black text-sm' : 'text-red-400 font-black text-sm'],
+                  ['Confidence', `${m.data.confidence}%`, 'text-cyan-400'],
+                  ['Whale Accumulation', m.data.whaleAccumulation, 'text-amber-400'],
+                  ['Price Target', m.data.priceTarget, 'text-emerald-400'],
+                  ['Stop Loss', m.data.stopLoss, 'text-red-400'],
+                  ['Risk Level', m.data.riskLevel, 'text-slate-300'],
                 ].map(([label, val, cls]) => (
                   <div key={label as string} className="flex justify-between items-center">
                     <span className="text-slate-500 text-xs">{label}</span>

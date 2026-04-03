@@ -11,32 +11,27 @@ dotenv.config();
 
 const app = express();
 app.use(cors());
-// Capture raw body bytes for HMAC webhook verification
 app.use(express.json({
     verify: (req, _res, buf) => { (req as any).rawBody = buf.toString('utf8'); }
 }));
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
 
-// ── Environment ──────────────────────────────────────────────────────────────
 const HASHKEY_TESTNET_RPC  = process.env.HASHKEY_TESTNET_RPC as string;
 const CONTRACT_ADDRESS     = process.env.CONTRACT_ADDRESS as string;
 const HSP_APP_KEY          = process.env.HSP_APP_KEY as string;
 const HSP_API_SECRET       = process.env.HSP_API_SECRET as string;
-const AGENT_A_PRIVATE_KEY  = process.env.AGENT_A_PRIVATE_KEY as string; // NEW: for autonomous path
+const AGENT_A_PRIVATE_KEY  = process.env.AGENT_A_PRIVATE_KEY as string;
 
-// ── Constants ────────────────────────────────────────────────────────────────
-const USDT_ADDRESS   = "0x372325443233fEbaC1F6998aC750276468c83CC6"; // USDT on HashKey Testnet
+const USDT_ADDRESS   = "0x372325443233fEbaC1F6998aC750276468c83CC6";
 const USDT_DECIMALS  = 6;
-const PAYMENT_AMOUNT = ethers.parseUnits("0.5", USDT_DECIMALS);      // 0.5 USDT
-const MIN_GAS_HSK    = ethers.parseEther("0.01");                    // min HSK for gas
+const PAYMENT_AMOUNT = ethers.parseUnits("0.5", USDT_DECIMALS);
+const MIN_GAS_HSK    = ethers.parseEther("0.01");
 
-// ── In-memory session state ───────────────────────────────────────────────────
-const paymentStatuses = new Map<string, string>();  // intentId → status
-const intentToVoucher = new Map<string, string>();  // intentId → voucherId
-const validVouchers   = new Map<string, boolean>(); // voucherId → valid
+const paymentStatuses = new Map<string, string>();
+const intentToVoucher = new Map<string, string>();
+const validVouchers   = new Map<string, boolean>();
 
-// ── Ethers provider + contract interfaces ────────────────────────────────────
 const provider = new ethers.JsonRpcProvider(HASHKEY_TESTNET_RPC);
 
 const routerAbi = [
@@ -50,15 +45,12 @@ const erc20Abi = [
 
 const epochstreamContract = new ethers.Contract(CONTRACT_ADDRESS, routerAbi, provider);
 
-// ── Layer 1: On-chain event listener (fallback / parallel verifier) ──────────
 console.log(`\n[ETHERS] 👁️  Listening for FundsLocked on HashKey Chain (${CONTRACT_ADDRESS})...`);
 
-epochstreamContract.on("FundsLocked", (intentIdBytes: string, _buyer: string, _seller: string, _token: string, amount: bigint) => {
+epochstreamContract.on("FundsLocked", (intentIdBytes: string, _b: string, _s: string, _t: string, amount: bigint) => {
     let intentId = intentIdBytes;
     try { intentId = ethers.decodeBytes32String(intentIdBytes).replace(/\0/g, ''); } catch (_) {}
-
     console.log(`\n[ETHERS] ⚡ FundsLocked — intent=${intentId} amount=${ethers.formatUnits(amount, USDT_DECIMALS)} USDT`);
-
     if (paymentStatuses.get(intentId) !== 'LOCKED_AND_VERIFIED') {
         paymentStatuses.set(intentId, 'LOCKED_AND_VERIFIED');
         if (!intentToVoucher.has(intentId)) {
@@ -70,7 +62,7 @@ epochstreamContract.on("FundsLocked", (intentIdBytes: string, _buyer: string, _s
     }
 });
 
-// ── Canonical JSON helper (RFC 8785) ─────────────────────────────────────────
+// ── Canonical JSON (RFC 8785) ─────────────────────────────────────────────────
 const canonicalStringify = (obj: any): string => {
     if (obj === null || typeof obj !== 'object') return JSON.stringify(obj);
     if (Array.isArray(obj)) return `[${obj.map(canonicalStringify).join(',')}]`;
@@ -78,18 +70,18 @@ const canonicalStringify = (obj: any): string => {
     return `{${keys.map(k => `${JSON.stringify(k)}:${canonicalStringify(obj[k])}`).join(',')}}`;
 };
 
-// ── Private key loader (env var takes precedence over .pem file) ─────────────
+// ── Load merchant private key (env var first, .pem fallback) ─────────────────
 const loadMerchantPrivateKey = (): string => {
-    let raw = process.env.MERCHANT_PRIVATE_KEY;
+    const raw = process.env.MERCHANT_PRIVATE_KEY;
     if (raw) return raw.replace(/\\n/g, '\n');
     return fs.readFileSync("../merchant_private_key.pem", "utf8");
 };
 
-// ── ES256K JWT + HMAC signed HashKey order helper ────────────────────────────
-const buildHashKeyOrder = async (intentId: string, amount: number) => {
-    const paymentRequestId = `PAY-${intentId}`; // ID2 ≠ ID1
+// ── Build HashKey CaaS order (ES256K JWT + HMAC-SHA256) ──────────────────────
+const buildHashKeyOrder = async (intentId: string, amount: number): Promise<string> => {
+    const paymentRequestId = `PAY-${intentId}`;
     const contents = {
-        id: intentId,                            // cart_mandate_id (ID1)
+        id: intentId,
         user_cart_confirmation_required: true,
         payment_request: {
             method_data: [{
@@ -104,7 +96,7 @@ const buildHashKeyOrder = async (intentId: string, amount: number) => {
                 }
             }],
             details: {
-                id: paymentRequestId,            // payment_request_id (ID2)
+                id: paymentRequestId,
                 display_items: [{ label: "Premium Trading Signal", amount: { currency: "USD", value: Number(amount).toFixed(2) } }],
                 total: { label: "Total", amount: { currency: "USD", value: Number(amount).toFixed(2) } }
             }
@@ -113,15 +105,11 @@ const buildHashKeyOrder = async (intentId: string, amount: number) => {
         merchant_name: "Epochstream"
     };
 
-    // cart_hash = SHA256(canonicalJSON(contents))
-    const cartHash = crypto.createHash('sha256').update(canonicalStringify(contents)).digest('hex');
-
-    // Load + convert SEC1 → PKCS8 for jose
-    const keyObj = crypto.createPrivateKey(loadMerchantPrivateKey());
-    const pkcs8Str = keyObj.export({ type: 'pkcs8', format: 'pem' }) as string;
+    const cartHash   = crypto.createHash('sha256').update(canonicalStringify(contents)).digest('hex');
+    const keyObj     = crypto.createPrivateKey(loadMerchantPrivateKey());
+    const pkcs8Str   = keyObj.export({ type: 'pkcs8', format: 'pem' }) as string;
     const privateKey = await jose.importPKCS8(pkcs8Str, 'ES256K');
 
-    // Sign ES256K JWT (merchant_authorization)
     const jwt = await new jose.SignJWT({ cart_hash: cartHash })
         .setProtectedHeader({ alg: 'ES256K', typ: 'JWT' })
         .setIssuer("Epochstream").setSubject("Epochstream")
@@ -130,14 +118,13 @@ const buildHashKeyOrder = async (intentId: string, amount: number) => {
         .setJti(`JWT-${Date.now()}`)
         .sign(privateKey);
 
-    // Build + HMAC-sign the full request body
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
     const payload = {
         cart_mandate: { contents, merchant_authorization: jwt },
         redirect_url: `${frontendUrl}?success=true&intentId=${intentId}`
     };
 
-    // Serialize ONCE — same string hashed AND sent to axios
+    // Hash and send the EXACT same canonical string (prevents HMAC body mismatch)
     const bodyStr   = canonicalStringify(payload);
     const nonce     = crypto.randomUUID().replace(/-/g, '');
     const timestamp = Math.floor(Date.now() / 1000).toString();
@@ -148,28 +135,43 @@ const buildHashKeyOrder = async (intentId: string, amount: number) => {
     const response = await axios.post(
         'https://merchant-qa.hashkeymerchant.com/api/v1/merchant/orders',
         bodyStr,
-        { headers: { 'X-App-Key': HSP_APP_KEY, 'X-Signature': signature, 'X-Timestamp': timestamp, 'X-Nonce': nonce, 'Content-Type': 'application/json' } }
+        {
+            headers: {
+                'X-App-Key': HSP_APP_KEY,
+                'X-Signature': signature,
+                'X-Timestamp': timestamp,
+                'X-Nonce': nonce,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                // Browser-like UA prevents Cloudflare WAF managed challenge on Railway IPs
+                'User-Agent': 'Mozilla/5.0 (compatible; Epochstream/1.0; +https://epochstream-production.up.railway.app)',
+                'Origin': 'https://merchant-qa.hashkeymerchant.com',
+            }
+        }
     );
+
+    // Detect Cloudflare HTML challenge page returned instead of JSON
+    if (typeof response.data === 'string' && (response.data as string).includes('challenge-platform')) {
+        throw new Error('Cloudflare WAF blocked this request. Ask HashKey to whitelist Railway egress IPs.');
+    }
 
     return response.data?.data?.payment_url as string;
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ROUTE A: Seller's paywalled /api/premium-data (Agent B)
+// ROUTE A: Seller paywalled endpoint (Agent B)
 // ═══════════════════════════════════════════════════════════════════════════════
 app.get('/api/premium-data', (req, res) => {
     const voucherId = req.headers['x-hsp-voucher-id'] as string;
 
     if (!voucherId || !validVouchers.get(voucherId)) {
-        // No valid voucher → issue a fresh intentId and demand payment
         const intentId = `order-${crypto.randomBytes(4).toString('hex')}`;
         paymentStatuses.set(intentId, 'PENDING_HSP');
         console.log(`\n[SELLER] ❌ 402 issued — intentId=${intentId}`);
         return res.status(402).json({ error: "Payment Required", intentId, price: 0.5, currency: "USDT" });
     }
 
-    // Valid voucher → serve premium DeFi trading signal
-    console.log(`\n[SELLER] ✅ Voucher verified. Serving premium trading signal.`);
+    console.log(`\n[SELLER] ✅ Valid voucher. Serving premium trading signal.`);
     return res.status(200).json({
         signal: "LONG HSK",
         asset: "HSK/USDT",
@@ -185,7 +187,7 @@ app.get('/api/premium-data', (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ROUTE B: Status polling endpoint
+// ROUTE B: Status polling
 // ═══════════════════════════════════════════════════════════════════════════════
 app.get('/api/status', (req, res) => {
     const intentId = req.query.intentId as string;
@@ -196,7 +198,7 @@ app.get('/api/status', (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ROUTE C: Generate HashKey CaaS Checkout URL  (Human / EIP-712 payment path)
+// ROUTE C: Generate HashKey CaaS checkout URL (human / EIP-712 payment path)
 // ═══════════════════════════════════════════════════════════════════════════════
 app.post('/api/checkout-url', async (req, res) => {
     const { intentId, amount } = req.body;
@@ -212,7 +214,7 @@ app.post('/api/checkout-url', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ROUTE D: Autonomous on-chain payment  (Agent Wallet / ethers.js path)
+// ROUTE D: Autonomous on-chain payment (agent wallet / ethers.js path)
 // ═══════════════════════════════════════════════════════════════════════════════
 app.post('/api/autonomous-pay', async (req, res) => {
     const { intentId } = req.body;
@@ -223,10 +225,9 @@ app.post('/api/autonomous-pay', async (req, res) => {
     }
 
     try {
-        const agentWallet = new ethers.Wallet(AGENT_A_PRIVATE_KEY, provider);
+        const agentWallet   = new ethers.Wallet(AGENT_A_PRIVATE_KEY, provider);
         const walletAddress = await agentWallet.getAddress();
 
-        // ── Balance checks (fail fast before any tx) ──────────────────────────
         const usdtContract = new ethers.Contract(USDT_ADDRESS, erc20Abi, agentWallet);
         const [usdtBalance, hskBalance] = await Promise.all([
             usdtContract.balanceOf(walletAddress),
@@ -244,12 +245,10 @@ app.post('/api/autonomous-pay', async (req, res) => {
             });
         }
 
-        // ── Approve USDT spend ────────────────────────────────────────────────
         console.log(`[AUTONOMOUS] ✍️  Approving USDT...`);
         const approveTx = await usdtContract.approve(CONTRACT_ADDRESS, PAYMENT_AMOUNT);
         await approveTx.wait();
 
-        // ── Lock funds in EpochstreamRouter.sol escrow ───────────────────────
         const routerWithSigner = new ethers.Contract(CONTRACT_ADDRESS, routerAbi, agentWallet);
         const intentIdBytes32  = ethers.encodeBytes32String(intentId.slice(0, 31));
 
@@ -257,10 +256,8 @@ app.post('/api/autonomous-pay', async (req, res) => {
         const lockTx  = await routerWithSigner.lockFunds(intentIdBytes32, walletAddress, USDT_ADDRESS, PAYMENT_AMOUNT);
         const receipt = await lockTx.wait();
         const txHash  = receipt.hash;
-
         console.log(`[AUTONOMOUS] 🎉 TX confirmed: ${txHash}`);
 
-        // Immediately issue voucher (on-chain listener may also do this idempotently)
         if (paymentStatuses.get(intentId) !== 'LOCKED_AND_VERIFIED') {
             paymentStatuses.set(intentId, 'LOCKED_AND_VERIFIED');
             const voucherId = `hsp-voucher-${crypto.randomBytes(4).toString('hex')}`;
@@ -280,7 +277,7 @@ app.post('/api/autonomous-pay', async (req, res) => {
 // ROUTE E: HashKey Webhook (HMAC-SHA256 verified, constant-time compare)
 // ═══════════════════════════════════════════════════════════════════════════════
 app.post('/webhook/hsp', (req, res) => {
-    console.log(`\n[WEBHOOK] 🔗 Incoming callback from HashKey CaaS...`);
+    console.log(`\n[WEBHOOK] 🔗 Callback from HashKey CaaS...`);
     const sigHeader = req.headers['x-signature'] as string;
 
     if (sigHeader) {
@@ -292,12 +289,11 @@ app.post('/webhook/hsp', (req, res) => {
             });
 
             if (Math.abs(Math.floor(Date.now() / 1000) - parseInt(t)) > 300) {
-                console.error(`[WEBHOOK] ⚠️ Timestamp out of tolerance.`);
                 return res.status(400).json({ code: 1, msg: "timestamp out of tolerance" });
             }
 
-            const rawBody    = (req as any).rawBody || JSON.stringify(req.body);
-            const expected   = crypto.createHmac('sha256', HSP_API_SECRET).update(`${t}.${rawBody}`).digest('hex');
+            const rawBody  = (req as any).rawBody || JSON.stringify(req.body);
+            const expected = crypto.createHmac('sha256', HSP_API_SECRET).update(`${t}.${rawBody}`).digest('hex');
 
             if (expected.length !== v1.length || !crypto.timingSafeEqual(Buffer.from(v1), Buffer.from(expected))) {
                 console.error(`[WEBHOOK] ❌ HMAC mismatch.`);
@@ -305,14 +301,13 @@ app.post('/webhook/hsp', (req, res) => {
             }
             console.log(`[WEBHOOK] 🔒 HMAC validated!`);
         } catch (_) {
-            console.error(`[WEBHOOK] ⚠️ Signature parse error, proceeding.`);
+            console.error(`[WEBHOOK] ⚠️ Signature parse error.`);
         }
     }
 
-    // cart_mandate_id (ID1) = our intentId — never use payment_request_id (ID2)
+    // Use cart_mandate_id (ID1 = our intentId), NOT payment_request_id (ID2 = "PAY-{intentId}")
     const intentId = req.body.cart_mandate_id || req.body.data?.cart_mandate_id;
     const status   = req.body.status || req.body.data?.status;
-
     console.log(`[WEBHOOK] cart_mandate_id=${intentId} status=${status}`);
 
     if ((status === 'payment-successful' || status === 'payment-included') && intentId) {

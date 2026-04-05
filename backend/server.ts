@@ -381,18 +381,22 @@ app.post('/webhook/hsp', (req, res) => {
         }
     }
 
-    // Use cart_mandate_id (ID1 = our intentId), NOT payment_request_id (ID2 = "PAY-{intentId}")
+    // Use cart_mandate_id (ID1 = our intentId) and check payment_request_id for recurring charges
     const intentId = req.body.cart_mandate_id || req.body.data?.cart_mandate_id;
+    const paymentReqId = req.body.payment_request_id || req.body.data?.payment_request_id;
     const status   = req.body.status || req.body.data?.status;
-    console.log(`[WEBHOOK] cart_mandate_id=${intentId} status=${status}`);
+    console.log(`[WEBHOOK] cart_mandate_id=${intentId} payment_req_id=${paymentReqId} status=${status}`);
 
     if ((status === 'payment-successful' || status === 'payment-included') && intentId) {
-        if (paymentStatuses.get(intentId) !== 'LOCKED_AND_VERIFIED') {
-            paymentStatuses.set(intentId, 'LOCKED_AND_VERIFIED');
+        const match = paymentReqId ? paymentReqId.match(/-charge(\d+)$/) : null;
+        const key = match ? `${intentId}-charge${match[1]}` : intentId;
+
+        if (paymentStatuses.get(key) !== 'LOCKED_AND_VERIFIED') {
+            paymentStatuses.set(key, 'LOCKED_AND_VERIFIED');
             const voucherId = `hsp-voucher-${crypto.randomBytes(4).toString('hex')}`;
             validVouchers.set(voucherId, true);
-            intentToVoucher.set(intentId, voucherId);
-            console.log(`[WEBHOOK] 🎫 Voucher issued: ${voucherId}`);
+            intentToVoucher.set(key, voucherId);
+            console.log(`[WEBHOOK] 🎫 Voucher issued for ${key}: ${voucherId}`);
         }
         return res.status(200).json({ code: 0, msg: "success" });
     }

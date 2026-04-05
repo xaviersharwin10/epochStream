@@ -266,6 +266,26 @@ export default function EpochstreamDashboard() {
         window.open(data.paymentUrl, '_blank');
         addSlog(`Charge #${data.chargeNumber} URL issued`, 'text-amber-400', '🚀');
         addMsg({ role: 'agent', type: 'link', content: `Day ${data.chargeNumber} checkout opened. Sign in wallet to receive next signal.`, data: { url: data.paymentUrl } });
+
+        // Poll for this specific charge's confirmation
+        const chargeKey = `${subscriptionId}-charge${data.chargeNumber}`;
+        for (let i = 0; i < 60; i++) {
+          await new Promise(r => setTimeout(r, 3000));
+          const statusRes = await fetch(`${API_BASE}/api/status?intentId=${chargeKey}`);
+          const statusJson = await statusRes.json();
+          if (statusJson.status === 'LOCKED_AND_VERIFIED' && statusJson.voucherId) {
+            addSlog(`Charge #${data.chargeNumber} confirmed!`, 'text-emerald-400', '✅');
+            const signalRes = await fetch(`${API_BASE}/api/premium-data`, { headers: { 'X-HSP-Voucher-ID': statusJson.voucherId } });
+            const signalData = signalRes.ok ? await signalRes.json() : null;
+            addMsg({
+              role: 'agent', type: 'subscription-card',
+              content: `Day ${data.chargeNumber} payment verified! New signal delivered.`,
+              data: { subscriptionId, chargeNumber: data.chargeNumber, signal: signalData, price }
+            });
+            return;
+          }
+        }
+        addMsg({ role: 'agent', type: 'error', content: `Day ${data.chargeNumber} payment timed out.` });
       }
     } catch (_) {
       removeLoading();

@@ -3,14 +3,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Bot, Server, Network, AlertTriangle, CheckCircle2,
-  Loader2, Zap, Send, TrendingUp, ExternalLink, Wallet, MousePointer
+  Loader2, Zap, Send, TrendingUp, ExternalLink, MousePointer,
+  CalendarDays, RefreshCw
 } from 'lucide-react';
 
 const API_BASE = "https://epochstream-production.up.railway.app";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type MsgType = 'text' | 'payment-choice' | 'loading' | 'signal-card' | 'error' | 'link';
-type FlowState = 'idle' | 'fetching' | 'awaiting-choice' | 'manual-pending' | 'auto-pending' | 'complete';
+type MsgType = 'text' | 'payment-choice' | 'loading' | 'signal-card' | 'error' | 'link' | 'subscription-card';
+type FlowState = 'idle' | 'fetching' | 'awaiting-choice' | 'manual-pending' | 'auto-pending' | 'sub-pending' | 'subscribed' | 'complete';
 
 interface Message {
   id: string;
@@ -24,7 +25,7 @@ interface LogEntry { id: string; time: string; msg: string; color: string; icon?
 
 const WELCOME: Message = {
   id: 'welcome', role: 'agent', type: 'text',
-  content: 'Agent A online. I\'m connected to the Epochstream oracle network. Ask me for a HashKey trading signal.'
+  content: 'Agent A online. I\'m connected to the Epochstream oracle network. Ask me for a trading signal, or subscribe for daily signals.'
 };
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -34,6 +35,7 @@ export default function EpochstreamDashboard() {
   const [sellerLogs, setSellerLogs] = useState<LogEntry[]>([]);
   const [flowState, setFlowState] = useState<FlowState>('idle');
   const [input, setInput] = useState('');
+  const [activeSubscriptionId, setActiveSubscriptionId] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll chat
@@ -138,51 +140,6 @@ export default function EpochstreamDashboard() {
     }
   };
 
-  // ── Step 4b: Autonomous path — ethers.js lockFunds ──────────────────────────
-  const handleAutonomousPay = async (intentId: string) => {
-    setFlowState('auto-pending');
-    addMsg({ role: 'user', type: 'text', content: 'Authorize your agent wallet to pay autonomously.' });
-    addMsg({ role: 'agent', type: 'loading', content: 'Agent signing transaction autonomously via ethers.js...' });
-    addSlog('Autonomous execution initiated', 'text-purple-400', '🤖');
-    addSlog('Checking USDT + HSK balances...', 'text-purple-400', '💰');
-
-    try {
-      const res = await fetch(`${API_BASE}/api/autonomous-pay`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ intentId })
-      });
-      const data = await res.json();
-      removeLoading();
-
-      // Insufficient funds → red warning bubble
-      if (res.status === 402 || data.error) {
-        addMsg({ role: 'agent', type: 'error', content: data.error });
-        addSlog('Insufficient agent wallet balance', 'text-red-400', '❌');
-        setFlowState('idle');
-        return;
-      }
-
-      // Success — tx landed
-      addSlog('USDT approved ✓', 'text-purple-400', '✍️');
-      addSlog('lockFunds() executed on-chain', 'text-purple-400', '🔒');
-      addSlog(`TX: ${data.txHash?.slice(0, 20)}...`, 'text-emerald-400', '⛓️');
-      addElog(`← FundsLocked event on HashKey Chain`, 'text-purple-400');
-      addElog(`  TX: ${data.txHash?.slice(0, 22)}...`, 'text-slate-500');
-
-      addMsg({
-        role: 'agent', type: 'link',
-        content: 'Payment verified on-chain. Transaction confirmed by HashKey Chain.',
-        data: { txHash: data.txHash }
-      });
-
-      await fulfillData(data.voucherId);
-    } catch (_) {
-      removeLoading();
-      addMsg({ role: 'agent', type: 'error', content: 'Autonomous payment failed. Try manual path.' });
-      setFlowState('idle');
-    }
-  };
-
   // ── Polling (manual path) ────────────────────────────────────────────────────
   const pollUntilPaid = async (intentId: string) => {
     for (let i = 0; i < 60; i++) {
@@ -234,6 +191,86 @@ export default function EpochstreamDashboard() {
     setSettlementLogs([]);
     setSellerLogs([]);
     setFlowState('idle');
+    setActiveSubscriptionId(null);
+  };
+
+  // ── Step 4c: Subscribe — reusable mandate, daily signals ────────────────────
+  const handleSubscribe = async (intentId: string, price: number) => {
+    setFlowState('sub-pending');
+    addMsg({ role: 'user', type: 'text', content: 'Subscribe me to daily trading signals.' });
+    addMsg({ role: 'agent', type: 'loading', content: 'Creating 30-day reusable mandate via HSP...' });
+    addSlog('Creating reusable mandate...', 'text-indigo-400', '📅');
+    addSlog('30-day cart_expiry set', 'text-indigo-400', '⏱️');
+    addSlog('Signing ES256K JWT for sub #1...', 'text-indigo-400', '🔑');
+
+    try {
+      const res = await fetch(`${API_BASE}/api/subscribe`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ intentId, amount: price })
+      });
+      const data = await res.json();
+      if (data.paymentUrl) {
+        window.open(data.paymentUrl, '_blank');
+        setActiveSubscriptionId(intentId);
+        removeLoading();
+        addSlog('Reusable checkout URL generated!', 'text-amber-400', '🚀');
+        addSlog('multi_pay=true confirmed by HSP', 'text-indigo-400', '✅');
+        addElog('← 402 + POST /merchant/orders/reusable', 'text-indigo-400');
+        addElog(`  cart_mandate_id: ${intentId.slice(0, 22)}...`, 'text-slate-500');
+        addMsg({ role: 'agent', type: 'link', content: 'Subscription checkout opened. Authorize Day 1 payment in your wallet.', data: { url: data.paymentUrl } });
+        // Poll for first charge confirmation
+        for (let i = 0; i < 60; i++) {
+          await new Promise(r => setTimeout(r, 3000));
+          const statusRes = await fetch(`${API_BASE}/api/status?intentId=${intentId}`);
+          const statusJson = await statusRes.json();
+          if (statusJson.status === 'LOCKED_AND_VERIFIED' && statusJson.voucherId) {
+            addSlog('Charge #1 confirmed!', 'text-emerald-400', '✅');
+            addSlog('Subscription ACTIVE 🟢', 'text-emerald-400', '📅');
+            removeLoading();
+            const signalRes = await fetch(`${API_BASE}/api/premium-data`, { headers: { 'X-HSP-Voucher-ID': statusJson.voucherId } });
+            const signalData = signalRes.ok ? await signalRes.json() : null;
+            addMsg({
+              role: 'agent', type: 'subscription-card',
+              content: 'Subscription active! Day 1 signal delivered.',
+              data: { subscriptionId: intentId, chargeNumber: 1, signal: signalData, price }
+            });
+            setFlowState('subscribed');
+            return;
+          }
+        }
+        addMsg({ role: 'agent', type: 'error', content: 'Subscription payment timed out.' });
+        setFlowState('idle');
+      }
+    } catch (_) {
+      removeLoading();
+      addMsg({ role: 'agent', type: 'error', content: 'Failed to create subscription.' });
+      setFlowState('idle');
+    }
+  };
+
+  // ── Next charge on existing subscription ────────────────────────────────────
+  const handleNextCharge = async (subscriptionId: string, chargeNumber: number, price: number) => {
+    addMsg({ role: 'agent', type: 'loading', content: `Triggering Day ${chargeNumber + 1} charge on same mandate...` });
+    addSlog(`Charge #${chargeNumber + 1} initiated`, 'text-indigo-400', '🔄');
+    addSlog(`Same cart_mandate_id reused`, 'text-indigo-400', '♻️');
+    addSlog(`New payment_request_id generated`, 'text-indigo-400', '🔑');
+
+    try {
+      const res = await fetch(`${API_BASE}/api/subscription/charge`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscriptionId, amount: price })
+      });
+      const data = await res.json();
+      removeLoading();
+      if (data.paymentUrl) {
+        window.open(data.paymentUrl, '_blank');
+        addSlog(`Charge #${data.chargeNumber} URL issued`, 'text-amber-400', '🚀');
+        addMsg({ role: 'agent', type: 'link', content: `Day ${data.chargeNumber} checkout opened. Sign in wallet to receive next signal.`, data: { url: data.paymentUrl } });
+      }
+    } catch (_) {
+      removeLoading();
+      addMsg({ role: 'agent', type: 'error', content: 'Failed to trigger next charge.' });
+    }
   };
 
   // ── Message renderer ─────────────────────────────────────────────────────────
@@ -272,9 +309,9 @@ export default function EpochstreamDashboard() {
                   className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 text-amber-300 rounded-lg text-xs font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed">
                   <MousePointer className="w-3 h-3" /> Pay Manually (HashKey Checkout)
                 </button>
-                <button onClick={() => handleAutonomousPay(m.data.intentId)} disabled={flowState !== 'awaiting-choice'}
-                  className="flex items-center gap-2 px-3 py-2 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/40 text-purple-300 rounded-lg text-xs font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-                  <Wallet className="w-3 h-3" /> Authorize Agent Wallet
+                <button onClick={() => handleSubscribe(m.data.intentId, m.data.price)} disabled={flowState !== 'awaiting-choice'}
+                  className="flex items-center gap-2 px-3 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 rounded-lg text-xs font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                  <CalendarDays className="w-3 h-3" /> Subscribe — Daily Signals (Multi-Pay)
                 </button>
               </div>
             </div>
@@ -292,6 +329,53 @@ export default function EpochstreamDashboard() {
                   <ExternalLink className="w-3 h-3" /> View on HashKey Explorer
                 </a>
               )}
+            </div>
+          )}
+          {m.type === 'subscription-card' && m.data && (
+            <div className="bg-slate-800 border border-indigo-500/40 rounded-2xl rounded-tl-sm overflow-hidden shadow-[0_0_20px_rgba(99,102,241,0.08)]">
+              <div className="bg-indigo-500/10 border-b border-indigo-500/20 px-3 py-2 flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <CalendarDays className="w-3.5 h-3.5 text-indigo-400" />
+                  <span className="text-indigo-400 font-bold text-xs tracking-wider">DAILY SUBSCRIPTION — ACTIVE</span>
+                </div>
+                <span className="text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full">🟢 LIVE</span>
+              </div>
+              <div className="p-3 space-y-2">
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500">Plan</span>
+                  <span className="text-indigo-300 font-medium">Daily HSK/USDT Oracle Signal</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500">Mandate Type</span>
+                  <span className="text-indigo-300">Reusable (multi_pay=true)</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500">Billing</span>
+                  <span className="text-emerald-400">${m.data.price} USDT/day</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500">Charges so far</span>
+                  <span className="text-white font-bold">Day {m.data.chargeNumber}</span>
+                </div>
+                {m.data.signal && (
+                  <div className="mt-2 pt-2 border-t border-slate-700">
+                    <p className="text-xs text-slate-500 mb-1">Day {m.data.chargeNumber} Signal</p>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-500">Signal</span>
+                      <span className={m.data.signal.signal?.startsWith('LONG') ? 'text-emerald-400 font-bold' : 'text-red-400 font-bold'}>{m.data.signal.signal}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-500">Confidence</span>
+                      <span className="text-cyan-400">{m.data.signal.confidence}%</span>
+                    </div>
+                  </div>
+                )}
+                <button
+                  onClick={() => handleNextCharge(m.data.subscriptionId, m.data.chargeNumber, m.data.price)}
+                  className="w-full mt-2 flex items-center justify-center gap-2 px-3 py-2 bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/40 text-indigo-300 rounded-lg text-xs font-medium transition-all">
+                  <RefreshCw className="w-3 h-3" /> Simulate Next Daily Charge
+                </button>
+              </div>
             </div>
           )}
           {m.type === 'signal-card' && m.data && (

@@ -29,6 +29,7 @@ const PAYMENT_AMOUNT = ethers.parseUnits("0.5", USDT_DECIMALS);
 const MIN_GAS_HSK    = ethers.parseEther("0.01");
 
 const paymentStatuses   = new Map<string, string>();
+const paymentTxHashes   = new Map<string, string>();
 const intentToVoucher   = new Map<string, string>();
 const validVouchers     = new Map<string, boolean>();
 // Subscription (reusable mandate) tracking
@@ -301,7 +302,8 @@ app.get('/api/status', (req, res) => {
     const intentId = req.query.intentId as string;
     return res.json({
         status: paymentStatuses.get(intentId) || 'PENDING_HSP',
-        voucherId: intentToVoucher.get(intentId)
+        voucherId: intentToVoucher.get(intentId),
+        txHash: paymentTxHashes.get(intentId)
     });
 });
 
@@ -404,9 +406,12 @@ app.post('/webhook/hsp', (req, res) => {
     const status   = req.body.status || req.body.data?.status;
     console.log(`[WEBHOOK] cart_mandate_id=${intentId} payment_req_id=${paymentReqId} status=${status}`);
 
-    if ((status === 'payment-successful' || status === 'payment-included') && intentId) {
+    if ((status === 'payment-successful' || status === 'payment-included' || status === 'payment-safe') && intentId) {
         const match = paymentReqId ? paymentReqId.match(/-charge(\d+)$/) : null;
         const key = match ? `${intentId}-charge${match[1]}` : intentId;
+
+        const txHash = req.body.tx_signature || req.body.data?.tx_signature || req.body.payment_tx_hash || req.body.data?.payment_tx_hash;
+        if (txHash) paymentTxHashes.set(key, txHash);
 
         if (paymentStatuses.get(key) !== 'LOCKED_AND_VERIFIED') {
             paymentStatuses.set(key, 'LOCKED_AND_VERIFIED');
@@ -414,6 +419,7 @@ app.post('/webhook/hsp', (req, res) => {
             validVouchers.set(voucherId, true);
             intentToVoucher.set(key, voucherId);
             console.log(`[WEBHOOK] 🎫 Voucher issued for ${key}: ${voucherId}`);
+            if (txHash) console.log(`[WEBHOOK] 🔗 TX: ${txHash}`);
         }
         return res.status(200).json({ code: 0, msg: "success" });
     }

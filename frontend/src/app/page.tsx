@@ -147,6 +147,10 @@ export default function EpochstreamDashboard() {
         const json = await res.json();
         if (json.status === 'LOCKED_AND_VERIFIED' && json.voucherId) {
           addSlog('Webhook received!', 'text-emerald-400', '✅');
+          if (json.txHash) {
+             addSlog(`TX: ${json.txHash.slice(0, 10)}...`, 'text-blue-400', '🔗');
+             addMsg({ role: 'agent', type: 'link', content: 'Transaction confirmed on HashKey Testnet.', data: { url: `https://hashkey.blockscout.com/tx/${json.txHash}` } });
+          }
           addSlog('HMAC validated ✓', 'text-emerald-400', '🔒');
           addSlog(`Voucher: ${json.voucherId.slice(0, 20)}...`, 'text-emerald-400', '🎫');
           addElog(`← payment-successful webhook`, 'text-emerald-400');
@@ -223,6 +227,10 @@ export default function EpochstreamDashboard() {
           const statusJson = await statusRes.json();
           if (statusJson.status === 'LOCKED_AND_VERIFIED' && statusJson.voucherId) {
             addSlog('Charge #1 confirmed!', 'text-emerald-400', '✅');
+            if (statusJson.txHash) {
+              addSlog(`TX: ${statusJson.txHash.slice(0, 10)}...`, 'text-blue-400', '🔗');
+              addMsg({ role: 'agent', type: 'link', content: 'Mandate activation linked on-chain.', data: { url: `https://hashkey.blockscout.com/tx/${statusJson.txHash}` } });
+            }
             addSlog('Subscription ACTIVE 🟢', 'text-emerald-400', '📅');
             removeLoading();
             const signalRes = await fetch(`${API_BASE}/api/premium-data`, { headers: { 'X-HSP-Voucher-ID': statusJson.voucherId } });
@@ -272,6 +280,10 @@ export default function EpochstreamDashboard() {
           const statusJson = await statusRes.json();
           if (statusJson.status === 'LOCKED_AND_VERIFIED' && statusJson.voucherId) {
             addSlog(`Charge #${data.chargeNumber} confirmed!`, 'text-emerald-400', '✅');
+            if (statusJson.txHash) {
+              addSlog(`TX: ${statusJson.txHash.slice(0, 10)}...`, 'text-blue-400', '🔗');
+              addMsg({ role: 'agent', type: 'link', content: `Autonomous charge executed successfully.`, data: { url: `https://hashkey.blockscout.com/tx/${statusJson.txHash}` } });
+            }
             const signalRes = await fetch(`${API_BASE}/api/premium-data`, { headers: { 'X-HSP-Voucher-ID': statusJson.voucherId } });
             const signalData = signalRes.ok ? await signalRes.json() : null;
             addMsg({

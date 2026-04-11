@@ -71,7 +71,7 @@ export default function EpochstreamDashboard() {
 
   // ── Step 1: User sends query ─────────────────────────────────────────────────
   const handleSend = async (q: string) => {
-    if (flowState !== 'idle') return;
+    if (!['idle', 'complete', 'subscribed'].includes(flowState)) return;
     addMsg({ role: 'user', type: 'text', content: q });
     setFlowState('fetching');
 
@@ -460,7 +460,7 @@ export default function EpochstreamDashboard() {
       <main className="flex-1 grid grid-cols-[40%_30%_30%] divide-x divide-slate-800 overflow-hidden">
 
         {/* ── Col 1: AI Quant Swarm Chat ── */}
-        <section className="flex flex-col bg-slate-900">
+        <section className="flex flex-col bg-slate-900 min-h-0">
           <div className="px-4 py-2.5 border-b border-slate-800 flex items-center gap-2 shrink-0">
             <Bot className="w-3.5 h-3.5 text-cyan-400" />
             <h2 className="text-xs font-semibold tracking-widest text-slate-400">AI QUANT SWARM</h2>
@@ -476,14 +476,14 @@ export default function EpochstreamDashboard() {
               <div className="flex flex-col gap-1.5">
                 <button 
                   onClick={() => handleSend('Request Live HashKey Premium Trading Signal.')}
-                  disabled={flowState !== 'idle' && flowState !== 'complete'}
+                  disabled={!['idle', 'complete', 'subscribed'].includes(flowState)}
                   className="text-left px-3 py-2 text-xs font-medium bg-slate-700/50 hover:bg-cyan-500/10 border border-slate-600 hover:border-cyan-500/30 text-slate-300 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   ⚡ Get HashKey Oracle Trading Signal
                 </button>
                 <button 
                   onClick={() => handleSend('Monitor Whale Accumulation Across Major Assets.')}
-                  disabled={flowState !== 'idle' && flowState !== 'complete'}
+                  disabled={!['idle', 'complete', 'subscribed'].includes(flowState)}
                   className="text-left px-3 py-2 text-xs font-medium bg-slate-700/50 hover:bg-cyan-500/10 border border-slate-600 hover:border-cyan-500/30 text-slate-300 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   🐋 Monitor Whale Analytics (Premium)
@@ -499,7 +499,7 @@ export default function EpochstreamDashboard() {
         </section>
 
         {/* ── Col 2: HSP Settlement Layer ── */}
-        <section className="flex flex-col bg-slate-950">
+        <section className="flex flex-col bg-slate-950 min-h-0">
           <div className="px-4 py-2.5 border-b border-slate-800 flex items-center gap-2 shrink-0">
             <Network className="w-3.5 h-3.5 text-amber-400" />
             <h2 className="text-xs font-semibold tracking-widest text-slate-400">HSP SETTLEMENT LAYER</h2>
@@ -519,7 +519,7 @@ export default function EpochstreamDashboard() {
         </section>
 
         {/* ── Col 3: Seller API Terminal ── */}
-        <section className="flex flex-col bg-slate-900">
+        <section className="flex flex-col bg-slate-900 min-h-0">
           <div className="px-4 py-2.5 border-b border-slate-800 flex items-center gap-2 shrink-0">
             <Server className="w-3.5 h-3.5 text-emerald-400" />
             <h2 className="text-xs font-semibold tracking-widest text-slate-400">SELLER API TERMINAL</h2>

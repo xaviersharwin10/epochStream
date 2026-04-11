@@ -219,7 +219,7 @@ export default function EpochstreamDashboard() {
         // Poll for first charge confirmation
         for (let i = 0; i < 60; i++) {
           await new Promise(r => setTimeout(r, 3000));
-          const statusRes = await fetch(`${API_BASE}/api/status?intentId=${intentId}`);
+          const statusRes = await fetch(`${API_BASE}/api/status?intentId=${intentId}-charge1`);
           const statusJson = await statusRes.json();
           if (statusJson.status === 'LOCKED_AND_VERIFIED' && statusJson.voucherId) {
             addSlog('Charge #1 confirmed!', 'text-emerald-400', '✅');

@@ -406,7 +406,7 @@ app.post('/webhook/hsp', (req, res) => {
     const status   = req.body.status || req.body.data?.status;
     console.log(`[WEBHOOK] cart_mandate_id=${intentId} payment_req_id=${paymentReqId} status=${status}`);
 
-    if ((status === 'payment-successful' || status === 'payment-included' || status === 'payment-safe') && intentId) {
+    if ((status === 'payment-successful' || status === 'payment-included' || status === 'payment-safe' || status === 'payment-finalized') && intentId) {
         const match = paymentReqId ? paymentReqId.match(/-charge(\d+)$/) : null;
         const key = match ? `${intentId}-charge${match[1]}` : intentId;
 

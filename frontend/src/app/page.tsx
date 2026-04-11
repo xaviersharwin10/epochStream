@@ -269,6 +269,7 @@ export default function EpochstreamDashboard() {
       const data = await res.json();
       removeLoading();
       if (data.paymentUrl) {
+        window.open(data.paymentUrl, '_blank');
         addSlog(`Autonomous charge #${data.chargeNumber} submitted`, 'text-amber-400', '🚀');
         addMsg({ role: 'agent', type: 'text', content: `Day ${data.chargeNumber} charge submitted securely to HSP. No wallet signature required for Reusable Mandates. Awaiting settlement...`});
 

@@ -170,7 +170,8 @@ const buildHashKeyReusableOrder = async (
     const paymentRequestId = `PAY-${subscriptionId}-charge${chargeNumber}`;
     const contents = {
         id: subscriptionId,                          // same across all charges
-        user_cart_confirmation_required: true,
+        user_cart_confirmation_required: chargeNumber === 1, // true for Day 1, false for autonomous Day 2+
+
         payment_request: {
             method_data: [{
                 supported_methods: "https://www.x402.org/",

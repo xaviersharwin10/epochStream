@@ -34,7 +34,7 @@ export default function EpochstreamDashboard() {
   const [settlementLogs, setSettlementLogs] = useState<LogEntry[]>([]);
   const [sellerLogs, setSellerLogs] = useState<LogEntry[]>([]);
   const [flowState, setFlowState] = useState<FlowState>('idle');
-  const [input, setInput] = useState('');
+
   const [activeSubscriptionId, setActiveSubscriptionId] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -70,10 +70,8 @@ export default function EpochstreamDashboard() {
     setSellerLogs(prev => [...prev, { id: uid(), time: now(), msg, color }]);
 
   // ── Step 1: User sends query ─────────────────────────────────────────────────
-  const handleSend = async () => {
-    const q = input.trim();
-    if (!q || flowState !== 'idle') return;
-    setInput('');
+  const handleSend = async (q: string) => {
+    if (flowState !== 'idle') return;
     addMsg({ role: 'user', type: 'text', content: q });
     setFlowState('fetching');
 
@@ -473,18 +471,24 @@ export default function EpochstreamDashboard() {
             <div ref={chatEndRef} />
           </div>
           <div className="border-t border-slate-800 p-3 shrink-0">
-            <div className="flex items-center gap-2 bg-slate-800 rounded-xl px-3 py-2 border border-slate-700 focus-within:border-cyan-500/40 transition-colors">
-              <input
-                type="text" value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSend()}
-                disabled={flowState !== 'idle' && flowState !== 'complete'}
-                placeholder={flowState === 'idle' || flowState === 'complete' ? 'Give me a HashKey trading signal...' : 'Awaiting confirmation...'}
-                className="flex-1 bg-transparent text-xs text-slate-200 placeholder-slate-600 outline-none disabled:opacity-50"
-              />
-              <button onClick={handleSend} disabled={flowState !== 'idle' && flowState !== 'complete'} className="text-cyan-400 hover:text-cyan-300 disabled:opacity-40 transition-colors">
-                <Send className="w-3.5 h-3.5" />
-              </button>
+            <div className="flex flex-col gap-2 bg-slate-800 rounded-xl px-3 py-3 border border-slate-700">
+              <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Select a Data Stream:</span>
+              <div className="flex flex-col gap-1.5">
+                <button 
+                  onClick={() => handleSend('Request Live HashKey Premium Trading Signal.')}
+                  disabled={flowState !== 'idle' && flowState !== 'complete'}
+                  className="text-left px-3 py-2 text-xs font-medium bg-slate-700/50 hover:bg-cyan-500/10 border border-slate-600 hover:border-cyan-500/30 text-slate-300 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  ⚡ Get HashKey Oracle Trading Signal
+                </button>
+                <button 
+                  onClick={() => handleSend('Monitor Whale Accumulation Across Major Assets.')}
+                  disabled={flowState !== 'idle' && flowState !== 'complete'}
+                  className="text-left px-3 py-2 text-xs font-medium bg-slate-700/50 hover:bg-cyan-500/10 border border-slate-600 hover:border-cyan-500/30 text-slate-300 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  🐋 Monitor Whale Analytics (Premium)
+                </button>
+              </div>
             </div>
             {flowState === 'complete' && (
               <button onClick={reset} className="w-full mt-2 text-xs text-slate-600 hover:text-slate-400 transition-colors">

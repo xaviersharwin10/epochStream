@@ -263,15 +263,31 @@ app.get('/api/premium-data', (req, res) => {
     }
 
     console.log(`\n[SELLER] ✅ Valid voucher. Serving premium trading signal.`);
+    
+    // Variety of mock data to show different signals per day
+    const mockSignals = [
+        {
+            signal: "LONG HSK", asset: "HSK/USDT", confidence: 94.7, whaleAccumulation: "+450%", priceTarget: "$0.847", stopLoss: "$0.612", riskLevel: "MODERATE", 
+            analysis: "On-chain data shows strong accumulation by whale wallets over the last 72h. HashKey Chain TVL up 182%. M2M payment flow velocity at ATH."
+        },
+        {
+            signal: "SHORT BTC", asset: "BTC/USDT", confidence: 88.2, whaleAccumulation: "-120%", priceTarget: "$58,400", stopLoss: "$64,200", riskLevel: "HIGH", 
+            analysis: "Exchange inflows spiking alongside bearish divergence on MACD. Miners observed transferring large tranches to OTC desks."
+        },
+        {
+            signal: "LONG ETH", asset: "ETH/USDT", confidence: 91.5, whaleAccumulation: "+210%", priceTarget: "$3,850", stopLoss: "$3,120", riskLevel: "LOW", 
+            analysis: "L2 activity hitting all-time highs resulting in massive ETH burn. Institutional staking inflows creating a supply shock on mainnet."
+        },
+        {
+            signal: "LONG SOL", asset: "SOL/USDT", confidence: 85.0, whaleAccumulation: "+150%", priceTarget: "$185", stopLoss: "$130", riskLevel: "MODERATE", 
+            analysis: "DeFi volume consistently surging. Breakout confirmed above 50MA resistance. Strong momentum and network adoption metrics across the board."
+        }
+    ];
+
+    const randomSignal = mockSignals[Math.floor(Math.random() * mockSignals.length)];
+    
     return res.status(200).json({
-        signal: "LONG HSK",
-        asset: "HSK/USDT",
-        confidence: 94.7,
-        whaleAccumulation: "+450%",
-        priceTarget: "$0.847",
-        stopLoss: "$0.612",
-        riskLevel: "MODERATE",
-        analysis: "On-chain data shows strong accumulation by whale wallets over the last 72h. HashKey Chain TVL up 182%. M2M payment flow velocity at ATH.",
+        ...randomSignal,
         source: "Epochstream Oracle Network",
         timestamp: new Date().toISOString()
     });

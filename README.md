@@ -12,14 +12,6 @@
 
 Epochstream is a **Universal M2M Payment Router** that demonstrates how HSP can power real-world, autonomous payment flows. A buyer AI agent (Agent A) requests premium data from a seller agent (Agent B). Agent B issues an HTTP 402 Payment Required. Agent A routes the payment through HSP — generating an on-chain USDT settlement on HashKey Chain — and receives live data the moment the webhook confirms the transaction.
 
-The same HSP payment infrastructure handles **three distinct real-world verticals** in a single demo:
-
-| Use Case | Vertical | Payment Type |
-|---|---|---|
-| 🔮 HashKey Oracle Trading Signal | DeFi | One-time / Reusable Mandate |
-| 🚗 IoT EV Charging Auto-Pay | DePIN | Per-session M2M |
-| 🤖 AI Compute Pay-per-Use | SaaS | Metered billing |
-
 ---
 
 ## 🏗 Architecture

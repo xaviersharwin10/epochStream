@@ -49,16 +49,45 @@ export default function EpochstreamDashboard() {
   // Auto-scroll chat
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
-  // Recover state when HashKey checkout redirects back with ?success=true&intentId=xxx
+  // Handle HashKey checkout redirect — runs in BOTH parent and popup tabs
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
     const id = p.get('intentId');
+    const charge = p.get('charge');
     if (p.get('success') === 'true' && id) {
       window.history.replaceState({}, '', '/');
+      // If this is a popup tab opened by our app, signal the parent and close
+      if (window.opener && !window.opener.closed) {
+        window.opener.postMessage({ type: 'EPOCHSTREAM_PAYMENT_SUCCESS', intentId: id, charge }, '*');
+        window.close();
+        return;
+      }
+      // Fallback: this IS the parent tab (redirect happened here directly)
       addMsg({ role: 'agent', type: 'loading', content: 'Verifying on-chain payment...' });
       setFlowState('manual-pending');
       pollUntilPaid(id);
     }
+  }, []);
+
+  // Listen for postMessage from the popup tab
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type !== 'EPOCHSTREAM_PAYMENT_SUCCESS') return;
+      const { intentId, charge } = event.data;
+      if (!intentId) return;
+      if (charge) {
+        // Subscription charge confirmed — poll for the specific charge key
+        const chargeKey = `${intentId}-charge${charge}`;
+        addSlog(`Charge confirmed by popup`, 'text-emerald-400', '✅');
+      } else {
+        // One-time payment confirmed
+        addMsg({ role: 'agent', type: 'loading', content: 'Verifying on-chain payment...' });
+        setFlowState('manual-pending');
+        pollUntilPaid(intentId);
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
   }, []);
 
   // ── Helpers ─────────────────────────────────────────────────────────────────

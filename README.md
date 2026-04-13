@@ -24,40 +24,8 @@ The same HSP payment infrastructure handles **three distinct real-world vertical
 
 ## 🏗 Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     Epochstream Platform                        │
-│                                                                 │
-│  ┌──────────────┐    HTTP 402     ┌──────────────────────────┐  │
-│  │  Agent A     │ ─────────────► │  Agent B (Seller API)    │  │
-│  │ (Buyer UI)   │                │  /api/premium-data       │  │
-│  │              │ ◄────────────  │  Returns 402 + intentId  │  │
-│  └──────┬───────┘                └──────────────────────────┘  │
-│         │                                                       │
-│         │ POST /api/checkout-url or /api/subscribe              │
-│         ▼                                                       │
-│  ┌──────────────┐   HMAC+JWT    ┌─────────────────────────┐    │
-│  │  Epochstream │ ─────────────► │  HashKey Merchant API   │    │
-│  │  Backend     │               │  /merchant/orders        │    │
-│  │  (Railway)   │ ◄──────────── │  /merchant/orders/       │    │
-│  │              │  payment_url  │  reusable                │    │
-│  └──────┬───────┘               └─────────────────────────┘    │
-│         │                                                       │
-│         │ User signs EIP-712 mandate in wallet                  │
-│         ▼                                                       │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │               HashKey Chain (Testnet)                    │   │
-│  │         USDT Settlement Contract (ERC-20)                │   │
-│  └──────┬───────────────────────────────────────────────────┘   │
-│         │                                                       │
-│         │ Webhook: payment-included / payment-successful         │
-│         ▼                                                       │
-│  ┌──────────────┐   Voucher    ┌──────────────────────────┐    │
-│  │  /webhook/   │ ─────────── ► │  HMAC-validated voucher  │    │
-│  │  hsp         │              │  issued to Agent A        │    │
-│  └──────────────┘              └──────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────┘
-```
+![Epochstream System Architecture](./architecture.svg)
+
 
 ---
 

@@ -256,17 +256,59 @@ const buildHashKeyReusableOrder = async (
 // ═══════════════════════════════════════════════════════════════════════════════
 app.get('/api/premium-data', (req, res) => {
     const voucherId = req.headers['x-hsp-voucher-id'] as string;
+    const dataType = (req.query.type as string) || 'trading';
 
     if (!voucherId || !validVouchers.get(voucherId)) {
         const intentId = `order-${crypto.randomBytes(4).toString('hex')}`;
         paymentStatuses.set(intentId, 'PENDING_HSP');
-        console.log(`\n[SELLER] ❌ 402 issued — intentId=${intentId}`);
+        console.log(`\n[SELLER] ❌ 402 issued — intentId=${intentId} type=${dataType}`);
         return res.status(402).json({ error: "Payment Required", intentId, price: 0.5, currency: "USDT" });
     }
 
-    console.log(`\n[SELLER] ✅ Valid voucher. Serving premium trading signal.`);
+    console.log(`\n[SELLER] ✅ Valid voucher. Serving ${dataType} data.`);
 
-    // Variety of mock data to show different signals per day
+    if (dataType === 'ev-charging') {
+        const stations = ['Station #H7 — Kowloon Bay', 'Station #H12 — Tsim Sha Tsui', 'Station #H3 — Causeway Bay', 'Station #H21 — Sha Tin'];
+        const station = stations[Math.floor(Math.random() * stations.length)];
+        const kwh = (15 + Math.random() * 30).toFixed(2);
+        const minutes = Math.floor(40 + Math.random() * 80);
+        return res.status(200).json({
+            type: 'ev-charging',
+            sessionId: `EV-${crypto.randomBytes(3).toString('hex').toUpperCase()}`,
+            station,
+            energyDelivered: `${kwh} kWh`,
+            duration: `${minutes} min`,
+            cost: '$0.50 USDT',
+            vehicle: 'Tesla Model 3 (0x8f4a...)',
+            settlement: 'HashKey Chain — Instant M2M',
+            protocol: 'HSP DePIN Auto-Pay',
+            source: 'Epochstream IoT Oracle',
+            timestamp: new Date().toISOString()
+        });
+    }
+
+    if (dataType === 'ai-compute') {
+        const models = ['GPT-4o (OpenAI)', 'Claude 3.7 Sonnet', 'Gemini 3.0 Ultra', 'Llama 3.1 405B'];
+        const model = models[Math.floor(Math.random() * models.length)];
+        const tokens = Math.floor(800000 + Math.random() * 400000);
+        const latency = (120 + Math.random() * 200).toFixed(0);
+        return res.status(200).json({
+            type: 'ai-compute',
+            invoiceId: `INV-${crypto.randomBytes(3).toString('hex').toUpperCase()}`,
+            model,
+            tokensProcessed: `${(tokens / 1_000_000).toFixed(2)}M tokens`,
+            latency: `${latency}ms avg`,
+            cost: '$0.50 USDT',
+            rateCardPer1M: '$0.50 USDT',
+            billingModel: 'Pay-per-use (no subscription lock-in)',
+            settlement: 'HashKey Chain — On-chain Invoice',
+            protocol: 'HSP SaaS Metered Billing',
+            source: 'Epochstream Compute Oracle',
+            timestamp: new Date().toISOString()
+        });
+    }
+
+    // Default: trading signal
     const mockSignals = [
         {
             signal: "LONG HSK", asset: "HSK/USDT", confidence: 94.7, whaleAccumulation: "+450%", priceTarget: "$0.847", stopLoss: "$0.612", riskLevel: "MODERATE",
@@ -285,15 +327,15 @@ app.get('/api/premium-data', (req, res) => {
             analysis: "DeFi volume consistently surging. Breakout confirmed above 50MA resistance. Strong momentum and network adoption metrics across the board."
         }
     ];
-
     const randomSignal = mockSignals[Math.floor(Math.random() * mockSignals.length)];
-
     return res.status(200).json({
+        type: 'trading',
         ...randomSignal,
         source: "Epochstream Oracle Network",
         timestamp: new Date().toISOString()
     });
 });
+
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ROUTE B: Status polling

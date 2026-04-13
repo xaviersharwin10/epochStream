@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Bot, Server, Network, AlertTriangle, CheckCircle2,
   Loader2, Zap, Send, TrendingUp, ExternalLink, MousePointer,
-  CalendarDays, RefreshCw
+  CalendarDays, RefreshCw, Cpu, Zap as EvZap
 } from 'lucide-react';
 
 const API_BASE = "https://epochstream-production.up.railway.app";
@@ -25,7 +25,14 @@ interface LogEntry { id: string; time: string; msg: string; color: string; icon?
 
 const WELCOME: Message = {
   id: 'welcome', role: 'agent', type: 'text',
-  content: 'Agent A online. I\'m connected to the Epochstream oracle network. Ask me for a trading signal, or subscribe for daily signals.'
+  content: 'Agent A online. I\'m connected to the Epochstream oracle network. Select a data stream below — trading signals, EV charging receipts, or AI compute invoices.'
+};
+
+type DataType = 'trading' | 'ev-charging' | 'ai-compute';
+const DATA_TYPE_LABELS: Record<DataType, string> = {
+  'trading': 'HashKey Trading Signal',
+  'ev-charging': 'IoT EV Charging Session',
+  'ai-compute': 'AI API Compute Invoice'
 };
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -34,6 +41,7 @@ export default function EpochstreamDashboard() {
   const [settlementLogs, setSettlementLogs] = useState<LogEntry[]>([]);
   const [sellerLogs, setSellerLogs] = useState<LogEntry[]>([]);
   const [flowState, setFlowState] = useState<FlowState>('idle');
+  const [dataType, setDataType] = useState<DataType>('trading');
 
   const [activeSubscriptionId, setActiveSubscriptionId] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -70,17 +78,18 @@ export default function EpochstreamDashboard() {
     setSellerLogs(prev => [...prev, { id: uid(), time: now(), msg, color }]);
 
   // ── Step 1: User sends query ─────────────────────────────────────────────────
-  const handleSend = async (q: string) => {
+  const handleSend = async (q: string, type: DataType = 'trading') => {
     if (!['idle', 'complete', 'subscribed'].includes(flowState)) return;
+    setDataType(type);
     addMsg({ role: 'user', type: 'text', content: q });
     setFlowState('fetching');
 
     await new Promise(r => setTimeout(r, 700));
-    addMsg({ role: 'agent', type: 'loading', content: 'Querying Seller API for premium data...' });
-    addElog('→ GET /api/premium-data (no voucher)', 'text-slate-400');
+    addMsg({ role: 'agent', type: 'loading', content: `Querying Seller API for ${DATA_TYPE_LABELS[type]}...` });
+    addElog(`→ GET /api/premium-data?type=${type} (no voucher)`, 'text-slate-400');
 
     try {
-      const res = await fetch(`${API_BASE}/api/premium-data`);
+      const res = await fetch(`${API_BASE}/api/premium-data?type=${type}`);
       if (res.status === 402) {
         const data = await res.json();
         addElog(`← 402 Payment Required — ${data.price} ${data.currency}`, 'text-amber-400');
@@ -91,7 +100,7 @@ export default function EpochstreamDashboard() {
         removeLoading();
         addMsg({
           role: 'agent', type: 'payment-choice',
-          content: `This requires premium oracle data. Cost: **${data.price} ${data.currency}**. How would you like to proceed?`,
+          content: `Access to **${DATA_TYPE_LABELS[type]}** requires HSP payment. Cost: **${data.price} ${data.currency}**. How would you like to proceed?`,
           data: { intentId: data.intentId, price: data.price }
         });
         setFlowState('awaiting-choice');
@@ -156,8 +165,8 @@ export default function EpochstreamDashboard() {
           addElog(`← payment-successful webhook`, 'text-emerald-400');
           addElog(`  Voucher issued`, 'text-slate-500');
           removeLoading();
-          addMsg({ role: 'agent', type: 'text', content: 'Payment verified via HSP. Fetching your premium trading signal...' });
-          await fulfillData(json.voucherId);
+          addMsg({ role: 'agent', type: 'text', content: `Payment verified via HSP. Fetching your ${DATA_TYPE_LABELS[dataType]}...` });
+          await fulfillData(json.voucherId, dataType);
           return;
         }
       } catch (_) { }
@@ -167,18 +176,24 @@ export default function EpochstreamDashboard() {
   };
 
   // ── Final data fulfillment ───────────────────────────────────────────────────
-  const fulfillData = async (voucherId: string) => {
-    addElog(`→ GET /api/premium-data`, 'text-slate-400');
+  const fulfillData = async (voucherId: string, type: DataType = dataType) => {
+    addElog(`→ GET /api/premium-data?type=${type}`, 'text-slate-400');
     addElog(`  X-HSP-Voucher-ID: ${voucherId.slice(0, 20)}...`, 'text-slate-500');
     try {
-      const res = await fetch(`${API_BASE}/api/premium-data`, {
+      const res = await fetch(`${API_BASE}/api/premium-data?type=${type}`, {
         headers: { 'X-HSP-Voucher-ID': voucherId }
       });
       if (res.ok) {
         const data = await res.json();
-        addElog('← 200 OK — Premium signal served!', 'text-emerald-400');
+        addElog(`← 200 OK — ${DATA_TYPE_LABELS[type]} served!`, 'text-emerald-400');
         addSlog('M2M data fulfillment complete!', 'text-emerald-400', '🏁');
-        addMsg({ role: 'agent', type: 'signal-card', content: 'Here is your premium HashKey trading signal:', data });
+        if (type === 'ev-charging') {
+          addMsg({ role: 'agent', type: 'signal-card', content: 'EV charging session receipt delivered:', data });
+        } else if (type === 'ai-compute') {
+          addMsg({ role: 'agent', type: 'signal-card', content: 'AI compute invoice delivered:', data });
+        } else {
+          addMsg({ role: 'agent', type: 'signal-card', content: 'Here is your premium HashKey trading signal:', data });
+        }
         setFlowState('complete');
       }
     } catch (_) {
@@ -408,7 +423,69 @@ export default function EpochstreamDashboard() {
               </div>
             </div>
           )}
-          {m.type === 'signal-card' && m.data && (
+          {m.type === 'signal-card' && m.data && m.data.type === 'ev-charging' && (
+            <div className="bg-slate-800 border border-emerald-500/40 rounded-2xl rounded-tl-sm overflow-hidden shadow-[0_0_20px_rgba(16,185,129,0.08)]">
+              <div className="bg-emerald-500/10 border-b border-emerald-500/20 px-3 py-2 flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-lg">🚗</span>
+                  <span className="text-emerald-400 font-bold text-xs tracking-wider">EV CHARGING RECEIPT</span>
+                </div>
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              </div>
+              <div className="p-3 space-y-2">
+                {[
+                  ['Session ID', m.data.sessionId, 'text-white font-mono'],
+                  ['Station', m.data.station, 'text-emerald-300'],
+                  ['Energy Delivered', m.data.energyDelivered, 'text-cyan-400 font-bold'],
+                  ['Duration', m.data.duration, 'text-slate-300'],
+                  ['Vehicle', m.data.vehicle, 'text-slate-400'],
+                  ['Cost', m.data.cost, 'text-amber-400 font-bold'],
+                  ['Protocol', m.data.protocol, 'text-emerald-400'],
+                ].map(([label, val, cls]) => (
+                  <div key={label as string} className="flex justify-between items-center">
+                    <span className="text-slate-500 text-xs">{label}</span>
+                    <span className={`text-xs ${cls}`}>{val}</span>
+                  </div>
+                ))}
+                <div className="pt-2 border-t border-slate-700 flex justify-between text-xs text-slate-600">
+                  <span>{m.data.source}</span>
+                  <span>{new Date(m.data.timestamp).toLocaleTimeString()}</span>
+                </div>
+              </div>
+            </div>
+          )}
+          {m.type === 'signal-card' && m.data && m.data.type === 'ai-compute' && (
+            <div className="bg-slate-800 border border-violet-500/40 rounded-2xl rounded-tl-sm overflow-hidden shadow-[0_0_20px_rgba(139,92,246,0.08)]">
+              <div className="bg-violet-500/10 border-b border-violet-500/20 px-3 py-2 flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-lg">🤖</span>
+                  <span className="text-violet-400 font-bold text-xs tracking-wider">AI COMPUTE INVOICE</span>
+                </div>
+                <CheckCircle2 className="w-3.5 h-3.5 text-violet-400" />
+              </div>
+              <div className="p-3 space-y-2">
+                {[
+                  ['Invoice ID', m.data.invoiceId, 'text-white font-mono'],
+                  ['Model', m.data.model, 'text-violet-300'],
+                  ['Tokens Processed', m.data.tokensProcessed, 'text-cyan-400 font-bold'],
+                  ['Avg Latency', m.data.latency, 'text-slate-300'],
+                  ['Rate Card', m.data.rateCardPer1M + ' / 1M tokens', 'text-slate-400'],
+                  ['Cost', m.data.cost, 'text-amber-400 font-bold'],
+                  ['Billing Model', m.data.billingModel, 'text-violet-400'],
+                ].map(([label, val, cls]) => (
+                  <div key={label as string} className="flex justify-between items-center">
+                    <span className="text-slate-500 text-xs">{label}</span>
+                    <span className={`text-xs ${cls}`}>{val}</span>
+                  </div>
+                ))}
+                <div className="pt-2 border-t border-slate-700 flex justify-between text-xs text-slate-600">
+                  <span>{m.data.source}</span>
+                  <span>{new Date(m.data.timestamp).toLocaleTimeString()}</span>
+                </div>
+              </div>
+            </div>
+          )}
+          {m.type === 'signal-card' && m.data && m.data.type === 'trading' && (
             <div className="bg-slate-800 border border-emerald-500/40 rounded-2xl rounded-tl-sm overflow-hidden shadow-[0_0_20px_rgba(16,185,129,0.08)]">
               <div className="bg-emerald-500/10 border-b border-emerald-500/20 px-3 py-2 flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
@@ -486,19 +563,29 @@ export default function EpochstreamDashboard() {
             <div className="flex flex-col gap-2 bg-slate-800 rounded-xl px-3 py-3 border border-slate-700">
               <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Select a Data Stream:</span>
               <div className="flex flex-col gap-1.5">
-                <button 
-                  onClick={() => handleSend('Request Live HashKey Premium Trading Signal.')}
+                <button
+                  onClick={() => handleSend('Request Live HashKey Premium Trading Signal.', 'trading')}
                   disabled={!['idle', 'complete', 'subscribed'].includes(flowState)}
                   className="text-left px-3 py-2 text-xs font-medium bg-slate-700/50 hover:bg-cyan-500/10 border border-slate-600 hover:border-cyan-500/30 text-slate-300 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  ⚡ Get HashKey Oracle Trading Signal
+                  <span className="flex items-center gap-2"><span>⚡</span><span>Get HashKey Oracle Trading Signal</span></span>
+                  <span className="text-[10px] text-slate-600 mt-0.5 block">DeFi · $0.50 USDT one-time</span>
                 </button>
-                <button 
-                  onClick={() => handleSend('Monitor Whale Accumulation Across Major Assets.')}
+                <button
+                  onClick={() => handleSend('Simulate IoT EV Charging session payment via HSP.', 'ev-charging')}
                   disabled={!['idle', 'complete', 'subscribed'].includes(flowState)}
-                  className="text-left px-3 py-2 text-xs font-medium bg-slate-700/50 hover:bg-cyan-500/10 border border-slate-600 hover:border-cyan-500/30 text-slate-300 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="text-left px-3 py-2 text-xs font-medium bg-slate-700/50 hover:bg-emerald-500/10 border border-slate-600 hover:border-emerald-500/30 text-slate-300 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  🐋 Monitor Whale Analytics (Premium)
+                  <span className="flex items-center gap-2"><span>🚗</span><span>IoT EV Charging — Auto-Pay</span></span>
+                  <span className="text-[10px] text-slate-600 mt-0.5 block">DePIN · $0.50 USDT per session</span>
+                </button>
+                <button
+                  onClick={() => handleSend('Request AI Compute API invoice via HSP pay-per-use.', 'ai-compute')}
+                  disabled={!['idle', 'complete', 'subscribed'].includes(flowState)}
+                  className="text-left px-3 py-2 text-xs font-medium bg-slate-700/50 hover:bg-violet-500/10 border border-slate-600 hover:border-violet-500/30 text-slate-300 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <span className="flex items-center gap-2"><span>🤖</span><span>AI Compute — Pay-per-Use</span></span>
+                  <span className="text-[10px] text-slate-600 mt-0.5 block">SaaS · $0.50 USDT per 1M tokens</span>
                 </button>
               </div>
             </div>

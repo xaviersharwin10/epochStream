@@ -5,7 +5,9 @@
 🌐 **Live Demo:** [https://epoch-stream.vercel.app](https://epoch-stream.vercel.app)  
 📦 **Repository:** [https://github.com/xaviersharwin10/epochStream](https://github.com/xaviersharwin10/epochStream)  
 📜 **Contract:** [`0x5765B13165180F5d99E8C8741Cd082F9cDb61F5C`](https://testnet-explorer.hsk.xyz/address/0x5765B13165180F5d99E8C8741Cd082F9cDb61F5C) — HashKey Chain Testnet  
+🎬 **Demo Video:** [https://youtu.be/9RvmilyxWoI](https://youtu.be/9RvmilyxWoI)  
 🏆 **Track:** PayFi — HashKey On-Chain Horizon Hackathon 2026
+
 
 ---
 

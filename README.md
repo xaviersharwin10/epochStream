@@ -1,6 +1,6 @@
 # ⚡ Epochstream — Universal HSP Payment Router
 
-> **A real-time M2M PayFi marketplace** where AI agents autonomously buy and sell premium data across DeFi, DePIN, and SaaS verticals — powered by HashKey Settlement Protocol (HSP).
+> **A universal Web3 PayFi router** where users seamlessly purchase digital resources across DeFi, DePIN, and SaaS verticals — powered by HashKey Settlement Protocol (HSP).
 
 🌐 **Live Demo:** [https://epoch-stream.vercel.app](https://epoch-stream.vercel.app)  
 📦 **Repository:** [https://github.com/xaviersharwin10/epochStream](https://github.com/xaviersharwin10/epochStream)  
@@ -10,7 +10,9 @@
 
 ## 💡 What is Epochstream?
 
-Epochstream is a **Universal M2M Payment Router** that demonstrates how HSP can power real-world, autonomous payment flows. A buyer AI agent (Agent A) requests premium data from a seller agent (Agent B). Agent B issues an HTTP 402 Payment Required. Agent A routes the payment through HSP — generating an on-chain USDT settlement on HashKey Chain — and receives live data the moment the webhook confirms the transaction.
+Epochstream is a **Universal Digital Resource Router** that demonstrates how HSP can power real-world, frictionless payment flows for everyday users. When a user requests digital resources (like an AI model prompt or a trading signal), the provider issues an HTTP 402 Payment Required invoice. Epochstream routes the payment through HSP — generating an on-chain USDT settlement on HashKey Chain — and delivers the data the moment the webhook confirms the transaction.
+
+By leveraging **Reusable Mandates (multi_pay)**, Epochstream completely eliminates the need for users to manually sign transactions for recurring services, laying the precise technical foundation for **fully autonomous Machine-to-Machine (M2M) payments in the future.**
 
 ---
 
@@ -198,6 +200,20 @@ epochstream/
 | Smart Contract | HashKey Testnet | `0x5765B13165180F5d99E8C8741Cd082F9cDb61F5C` |
 
 ---
+
+## ⛓ Live On-Chain Transactions
+
+Real USDT settlements made via Epochstream on **HashKey Chain Testnet**, triggered through the HSP payment flow:
+
+| # | Transaction |
+|---|---|
+| 1 | [0x7fe77e39...bee589b9](https://testnet-explorer.hsk.xyz/tx/0x7fe77e39b396a0102b4b6fd80cea4c8bd5db80a9be2268a11d735766bee589b9) |
+| 2 | [0x05b82628...bd64f0f6](https://testnet-explorer.hsk.xyz/tx/0x05b82628eb1d6a83595f6578741d7396b4328407f52b6a7642738ce3bd64f0f6) |
+| 3 | [0x5a5c8489...2e96964a](https://testnet-explorer.hsk.xyz/tx/0x5a5c84895044b9995a7fe1b8299dcd668fb27a7586502a98ce431edb2e96964a) |
+| 4 | [0xf7c75a98...a8e50b03](https://testnet-explorer.hsk.xyz/tx/0xf7c75a98c15d16c6f2e3813ead802a7397b8bd8c92fcabb345129b07a8e50b03) |
+| 5 | [0x72b4e0eb...78d82042](https://testnet-explorer.hsk.xyz/tx/0x72b4e0ebd2c0e8ee2a451cd2b9d57443275fbd28acb945e2f215f44878d82042) |
+
+> Each transaction represents a complete HSP settlement cycle: HTTP 402 → Cart Mandate → HMAC-signed order → EIP-712 wallet signature → on-chain USDT transfer → HMAC-verified webhook → data delivery.
 
 ## 🏆 Hackathon
 
